@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { analyses, projects, sourceDocuments } from "@/db/schema";
-import { createStructured } from "@/lib/minimax";
+import { createStructured } from "@/lib/groq";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { analyses, generatedDocuments, projects, sections, sourceDocuments } from "@/db/schema";
+import { getBlobReadWriteToken } from "@/lib/blob";
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -26,7 +27,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   const { id } = await context.params;
   const db = getDb();
   const owned = await db.select({ pathname: sourceDocuments.blobPathname }).from(sourceDocuments).innerJoin(projects, eq(projects.id, sourceDocuments.projectId)).where(and(eq(projects.id, id), eq(projects.userId, session.user.id)));
-  if (process.env.BLOB_READ_WRITE_TOKEN) await Promise.all(owned.map(({ pathname }) => del(pathname, { token: process.env.BLOB_READ_WRITE_TOKEN }).catch(() => undefined)));
+  const blobToken = getBlobReadWriteToken();
+  if (blobToken) await Promise.all(owned.map(({ pathname }) => del(pathname, { token: blobToken }).catch(() => undefined)));
   const deleted = await db.delete(projects).where(and(eq(projects.id, id), eq(projects.userId, session.user.id))).returning({ id: projects.id });
   if (!deleted.length) return NextResponse.json({ error: "Project not found." }, { status: 404 });
   return NextResponse.json({ ok: true });

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { chunks, messages, projects, sourceDocuments } from "@/db/schema";
-import { askModel } from "@/lib/minimax";
+import { askModel } from "@/lib/groq";
 import { rankChunks } from "@/lib/documents";
 
 export const runtime = "nodejs";

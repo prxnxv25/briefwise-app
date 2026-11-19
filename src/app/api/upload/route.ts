@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/db";
 import { analyses, chunks, generatedDocuments, messages, projects, sourceDocuments } from "@/db/schema";
+import { getBlobReadWriteToken } from "@/lib/blob";
 import { extractText } from "@/lib/extract";
 import { splitIntoChunks } from "@/lib/documents";
 
@@ -15,10 +16,12 @@ const allowedTypes = ["application/pdf", "application/msword", "application/vnd.
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return NextResponse.json({ error: "Connect a private Vercel Blob store and set BLOB_READ_WRITE_TOKEN." }, { status: 503 });
+  const blobToken = getBlobReadWriteToken();
+  if (!blobToken) return NextResponse.json({ error: "Connect a private Vercel Blob store and set BLOB_READ_WRITE_TOKEN or BLOB1_READ_WRITE_TOKEN." }, { status: 503 });
   try {
     const body = await request.json();
     const result = await handleUpload({
+      token: blobToken,
       body,
       request,
       onBeforeGenerateToken: async (_pathname, clientPayload) => {
@@ -40,13 +43,13 @@ export async function POST(request: Request) {
         if (!payload.userId || !payload.projectId || !payload.originalName) throw new Error("Upload ownership could not be verified.");
         const [project] = await getDb().select({ id: projects.id }).from(projects).where(and(eq(projects.id, payload.projectId), eq(projects.userId, payload.userId))).limit(1);
         if (!project) throw new Error("Project no longer exists.");
-        const stored = await get(blob.pathname, { access: "private" });
+        const stored = await get(blob.pathname, { access: "private", token: blobToken });
         if (!stored || stored.statusCode !== 200) throw new Error("Uploaded file could not be read from private storage.");
         const bytes = Buffer.from(await new Response(stored.stream).arrayBuffer());
         const text = await extractText(payload.originalName, bytes);
         const db = getDb();
         const oldDocuments = await db.select({ pathname: sourceDocuments.blobPathname }).from(sourceDocuments).where(eq(sourceDocuments.projectId, payload.projectId));
-        await Promise.all(oldDocuments.map(({ pathname }) => del(pathname).catch(() => undefined)));
+        await Promise.all(oldDocuments.map(({ pathname }) => del(pathname, { token: blobToken }).catch(() => undefined)));
         await db.delete(analyses).where(eq(analyses.projectId, payload.projectId));
         await db.delete(generatedDocuments).where(eq(generatedDocuments.projectId, payload.projectId));
         await db.delete(messages).where(eq(messages.projectId, payload.projectId));
